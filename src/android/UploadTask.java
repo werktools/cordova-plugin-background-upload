@@ -367,7 +367,7 @@ public final class UploadTask extends Worker {
         // Start build request
         String method = nextPendingUpload.getInputData().getString(KEY_INPUT_HTTP_METHOD);
         if (method == null) {
-            method = "POST";
+            method = "PUT";
         }
         Request.Builder requestBuilder = new Request.Builder()
                 .url(url)
