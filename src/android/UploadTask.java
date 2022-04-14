@@ -370,8 +370,9 @@ public final class UploadTask extends Worker {
             method = "PUT";
         }
         Request.Builder requestBuilder = new Request.Builder()
-                .url(url)
-                .method(method.toUpperCase(), bodyBuilder.build());
+            .url(url)
+        .put(fileRequestBody);
+        //.method(method.toUpperCase(), bodyBuilder.build());
 
         // Write headers
         final int headersCount = nextPendingUpload.getInputData().getInt(KEY_INPUT_HEADERS_COUNT, 0);
