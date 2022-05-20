@@ -78,21 +78,19 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
 
 -(void)addUpload:(NSDictionary *)payload completionHandler:(void (^)(NSError* error))handler{
     __weak FileUploader *weakSelf = self;
-    NSURL *tempFilePath = [self tempFilePathForUpload:payload[@"id"]];
-    [self writeMultipartDataToTempFile:tempFilePath
-                                   url:[NSURL URLWithString:payload[@"serverUrl"]]
+    NSURL *filePath = [NSURL fileURLWithPath:payload[@"filePath"]];
+    [self createRequest: [NSURL URLWithString:payload[@"serverUrl"]]
                               uploadId:payload[@"id"]
-                               fileURL:[NSURL fileURLWithPath:payload[@"filePath"]]
                                headers: payload[@"headers"]
                             parameters:payload[@"parameters"]
-                               fileKey:payload[@"fileKey"]
                      completionHandler:^(NSError *error, NSMutableURLRequest *request) {
         if (error)
             return handler(error);
         __block double lastProgressTimeStamp = 0;
 
-        [[weakSelf.manager uploadTaskWithRequest:request
-                                        fromFile:tempFilePath
+        NSURLSessionUploadTask *uploadTask;
+        uploadTask = [weakSelf.manager uploadTaskWithRequest:request
+                                        fromFile:filePath
                                         progress:^(NSProgress * _Nonnull uploadProgress)
           {
             float roundedProgress = roundf(10 * (uploadProgress.fractionCompleted*100)) / 10.0;
@@ -107,8 +105,8 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
                 }];
             }
         }
-                               completionHandler:nil] resume];
-        [[NSFileManager defaultManager] removeItemAtURL:[weakSelf tempFilePathForUpload:payload[@"id"]] error:nil];
+                                            completionHandler:nil];
+        [uploadTask resume];
     }];
 }
 
@@ -117,38 +115,26 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
     return [NSURL fileURLWithPath:[path stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.request",uploadId]]];
 }
 
--(void)writeMultipartDataToTempFile: (NSURL*)tempFilePath
-                                url:(NSURL *)url
+-(void)createRequest: (NSURL*)url
                            uploadId:(NSString*)uploadId
-                            fileURL:(NSURL *)fileURL
                             headers:(NSDictionary*)headers
                          parameters:(NSDictionary*)parameters
-                            fileKey:(NSString*)fileKey
                   completionHandler:(void (^)(NSError* error, NSMutableURLRequest* request))handler{
     AFHTTPRequestSerializer *serializer = [AFHTTPRequestSerializer serializer];
     NSError *error;
     NSMutableURLRequest *request =
-    [serializer multipartFormRequestWithMethod:@"PUT"
-                                     URLString:url.absoluteString
-                                    parameters:parameters
-                     constructingBodyWithBlock:^(id<AFMultipartFormData> formData)
-     {
-        NSString *filename = [fileURL.absoluteString lastPathComponent];
-        NSData * data = [NSData dataWithContentsOfURL:fileURL];
-        [formData appendPartWithFileData:data name:fileKey fileName:filename mimeType:@"application/octet-stream"];
-    }
-                                         error:&error];
+    [serializer requestWithMethod:@"PUT"
+                    URLString:url.absoluteString
+                    parameters:parameters
+                    error:&error];
     if (error)
         return handler(error, nil);
     for (NSString *key in headers) {
         [request setValue:[headers objectForKey:key] forHTTPHeaderField:key];
     }
     [NSURLProtocol setProperty:uploadId forKey:kUploadUUIDStrPropertyKey inRequest:request];
-    [serializer requestWithMultipartFormRequest:request writingStreamContentsToFile:tempFilePath completionHandler:^(NSError *error) {
-        if (!error && ![[NSFileManager defaultManager] fileExistsAtPath:tempFilePath.path])
-            error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadNoSuchFileError userInfo:nil];
-        handler(error, request);
-    }];
+    
+    handler(error, request);
 }
 
 -(void)removeUpload:(NSString*)uploadId{
