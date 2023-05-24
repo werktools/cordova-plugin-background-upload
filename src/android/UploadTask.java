@@ -2,6 +2,7 @@ package com.spoon.backgroundfileupload;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.Uri;
 import android.os.Build;
 import android.webkit.MimeTypeMap;
 
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.net.ProtocolException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
@@ -350,8 +352,17 @@ public final class UploadTask extends Worker {
             }
         }
 
-        File file = new File(filepath);
-        ProgressRequestBody fileRequestBody = new ProgressRequestBody(mediaType, file.length(), new FileInputStream(file), this::handleProgress);
+        Uri fileUri = Uri.parse(filepath);
+        FileInputStream fileStream = new FileInputStream(getApplicationContext().getContentResolver().openFileDescriptor(fileUri, "r").getFileDescriptor());
+        FileChannel channel = fileStream.getChannel();
+        long fileSize = 0;
+        try {
+            fileSize = channel.size();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        ProgressRequestBody fileRequestBody = new ProgressRequestBody(mediaType, fileSize, fileStream, this::handleProgress);
 
         // Build body
         final MultipartBody.Builder bodyBuilder = new MultipartBody.Builder();
