@@ -49,13 +49,13 @@ FileTransferManager.prototype.startUpload = function (payload) {
     payload.parameters = {}
   }
 
+  var self = this;
   var urlScheme = payload.filePath.split("://")[0];
   if (urlScheme === "content") {
     // android
     exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
   } else {
     // ios
-    var self = this
     window.resolveLocalFileSystemURL(payload.filePath, function (entry) {
       payload.filePath = new URL(entry.toURL()).pathname.replace(/^\/local-filesystem/, '')
       exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
