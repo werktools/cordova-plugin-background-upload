@@ -1,4 +1,4 @@
-﻿#If ignorance is bliss, then somebody knock the smile off my face
+#If ignorance is bliss, then somebody knock the smile off my face
 
 *.csproj.user
 *.suo
@@ -15,3 +15,4 @@ Thumbs.db
 
 node_modules
 demo/node_modules
+.idea
