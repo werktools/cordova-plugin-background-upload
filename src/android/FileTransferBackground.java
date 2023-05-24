@@ -305,6 +305,7 @@ public class FileTransferBackground extends CordovaPlugin {
                         .putString(UploadTask.KEY_INPUT_URL, (String) payload.get("serverUrl"))
                         .putString(UploadTask.KEY_INPUT_FILEPATH, (String) payload.get("filePath"))
                         .putString(UploadTask.KEY_INPUT_FILE_KEY, (String) payload.get("fileKey"))
+                        .putString(UploadTask.KEY_CONTENT_TYPE, (String) payload.get("contentType"))
                         .putString(UploadTask.KEY_INPUT_HTTP_METHOD, (String) payload.get("requestMethod"))
                         // Put headers
                         .putInt(UploadTask.KEY_INPUT_HEADERS_COUNT, headersNames.size())
