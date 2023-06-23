@@ -59,22 +59,23 @@ FileTransferManager.prototype.startUpload = function (payload) {
   // If we have a content URI or a 'legacy android path', pass those in without
   var urlScheme = payload.filePath.split("://")[0];
 
-  if (urlScheme === "file" && payload.filePath.startsWith('file:///storage/emulated/0/')) {
-    // If we have a "file://" prefix and this is an Android image, then just remove it and pass it through.
-    payload.filePath = payload.filePath.replace(/^file:\/\//, '');
-    exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
-  } else if (urlScheme === "content") {
-    // Don't do anything. The plugin can natively handle content://
-    exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
-  } else {
-    // ios
-    window.resolveLocalFileSystemURL(payload.filePath, function (entry) {
-      payload.filePath = new URL(entry.toURL()).pathname.replace(/^\/local-filesystem/, '')
-      exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
-    }, function () {
-      self.callback({ id: payload.id, state: 'FAILED', error: 'File not found: ' + payload.filePath })
-    })
-  }
+  exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload]);
+  // if (urlScheme === "file" && payload.filePath.startsWith('file:///storage/emulated/0/')) {
+  //   // If we have a "file://" prefix and this is an Android image, then just remove it and pass it through.
+  //   payload.filePath = payload.filePath.replace(/^file:\/\//, '');
+  //   exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
+  // } else if (urlScheme === "content") {
+  //   // Don't do anything. The plugin can natively handle content://
+  //   exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
+  // } else {
+  //   // ios
+  //   window.resolveLocalFileSystemURL(payload.filePath, function (entry) {
+  //     payload.filePath = new URL(entry.toURL()).pathname.replace(/^\/local-filesystem/, '')
+  //     exec(self.callback, null, 'FileTransferBackground', 'startUpload', [payload])
+  //   }, function () {
+  //     self.callback({ id: payload.id, state: 'FAILED', error: 'File not found: ' + payload.filePath })
+  //   })
+  // }
 }
 
 FileTransferManager.prototype.removeUpload = function (id, successCb, errorCb) {
