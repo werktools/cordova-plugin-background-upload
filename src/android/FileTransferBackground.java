@@ -226,6 +226,7 @@ public class FileTransferBackground extends CordovaPlugin {
                                 case SUCCEEDED:
                                     logMessage("Task succeeded: " + info.getId());
                                     completedTasks++;
+                                    break;
                                 case FAILED:
                                     // The task can't fail completely so something really bad has happened.
                                     logMessage("eventLabel='Uploader failed inexplicably' error='" + info.getOutputData() + "'");
