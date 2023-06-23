@@ -1,15 +1,19 @@
 package com.spoon.backgroundfileupload;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
+import android.webkit.MimeTypeMap;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.work.Data;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -178,14 +182,17 @@ public final class UploadTask extends Worker {
             try {
                 request = createRequest();
             } catch (FileNotFoundException e) {
-                FileTransferBackground.logMessageError("doWork: File not found !", e);
-                return Result.success(new Data.Builder()
+                FileTransferBackground.logMessageError("doWork: File not found!", e);
+                final Data data = new Data.Builder()
                         .putString(KEY_OUTPUT_ID, id)
                         .putBoolean(KEY_OUTPUT_IS_ERROR, true)
-                        .putString(KEY_OUTPUT_FAILURE_REASON, "File not found !")
+                        .putString(KEY_OUTPUT_FAILURE_REASON, "File not found")
                         .putBoolean(KEY_OUTPUT_FAILURE_CANCELED, false)
-                        .build()
-                );
+                        .build();
+                // Mark it as done.
+                AckDatabase.getInstance(getApplicationContext()).pendingUploadDao().markAsUploaded(nextPendingUpload.getId());
+                AckDatabase.getInstance(getApplicationContext()).uploadEventDao().insert(new UploadEvent(id, data));
+                return Result.success(data);
             } catch (NullPointerException e) {
                 return Result.retry();
             }
@@ -327,57 +334,92 @@ public final class UploadTask extends Worker {
         final String filepath = nextPendingUpload.getInputData().getString(KEY_INPUT_FILEPATH);
         assert filepath != null;
         final String fileKey = nextPendingUpload.getInputData().getString(KEY_INPUT_FILE_KEY);
-        final String contentType = nextPendingUpload.getInputData().getString(KEY_CONTENT_TYPE);
+        FileTransferBackground.logMessage("getFileRequestBody/filepath: " + filepath);
 
         // Build URL
         HttpUrl url = Objects.requireNonNull(HttpUrl.parse(nextPendingUpload.getInputData().getString(KEY_INPUT_URL))).newBuilder().build();
         Uri fileUri = Uri.parse(filepath);
 
-        // Get the mime type. We will need this for the rest of the stuff we will do. We can't base
-        // this off of the extension anymore.
-        final String mimeType = getApplicationContext().getContentResolver().getType(fileUri);
-        FileTransferBackground.logMessage("createRequest/mimeType: " + mimeType);
+        // Now, we need to get the file itself.
+        ProgressRequestBody fileRequestBody;
 
-        // Build file reader
-        MediaType mediaType;
-        
-        if(contentType != null) {
-            // if a content type is given, use it to chose the media type
-            mediaType = MediaType.parse(contentType);
-        } else {
-            // The old code here added "; charset=utf-8" at the end of the mediaType if it was json or a "db" extension. But I'm not gonna do that.
-            mediaType = MediaType.parse(mimeType);
-        }
-
-        FileInputStream fileStream = new FileInputStream(getApplicationContext().getContentResolver().openFileDescriptor(fileUri, "r").getFileDescriptor());
-        FileChannel channel = fileStream.getChannel();
-        long fileSize = 0;
-        try {
-            fileSize = channel.size();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        ProgressRequestBody fileRequestBody = new ProgressRequestBody(mediaType, fileSize, fileStream, this::handleProgress);
+        // We need to be able to handle both content:// and file:// schemes. So we adjust the way
+        // we load the file based on the content scheme. The code below should give us what we need.
+        fileRequestBody = getFileRequestBody(fileUri);
 
         MultipartBody.Builder bodyBuilder = null;
 
+        // If we only want the file itself to be in the request, then don't use a fileKey.
         if (fileKey != null) {
             // Build body
             bodyBuilder = buildFormRequest(filepath, fileKey, fileRequestBody);
         }
 
         // Start build request
-        String method = nextPendingUpload.getInputData().getString(KEY_INPUT_HTTP_METHOD);
-
-        if (method == null) {
-            method = "POST";
-        }
         Request.Builder requestBuilder = new Request.Builder()
                 .url(url)
-                .method(method.toUpperCase(), fileKey == null ? fileRequestBody : bodyBuilder.build());
+                .method(getRequestMethod(), fileKey == null ? fileRequestBody : bodyBuilder.build());
 
         // Write headers
+        addHeaders(requestBuilder);
+
+        // Ok
+        return requestBuilder.build();
+    }
+
+    @Nullable
+    private MediaType getMediaType(Uri fileUri) {
+        // Define the information we need on the request itself.
+        // Get the mime type. We will need this for the rest of the stuff we will do. We can't base
+        // this off of the extension anymore.
+        MediaType mediaType;
+        final String contentType = nextPendingUpload.getInputData().getString(KEY_CONTENT_TYPE);
+
+        if (contentType == null) {
+            if (ContentResolver.SCHEME_CONTENT.equals(fileUri.getScheme())) {
+                String mimeType = getApplicationContext().getContentResolver().getType(fileUri);
+                mediaType = MediaType.parse(mimeType);
+            } else {
+                // If this is a file URI...
+                String extension = MimeTypeMap.getFileExtensionFromUrl(fileUri.toString());
+                mediaType = MediaType.parse(MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension));
+            }
+        } else {
+            // If a content type is given, use it to chose the media type
+            mediaType = MediaType.parse(contentType);
+        }
+        return mediaType;
+    }
+
+    @NonNull
+    private ProgressRequestBody getFileRequestBody(Uri fileUri) throws FileNotFoundException {
+        ProgressRequestBody fileRequestBody;
+        FileTransferBackground.logMessage("getFileRequestBody/fileUri: " + fileUri);
+
+        MediaType mediaType = getMediaType(fileUri);
+        FileTransferBackground.logMessage("getFileRequestBody/mediaType: " + mediaType);
+
+        if (ContentResolver.SCHEME_CONTENT.equals(fileUri.getScheme())) {
+            FileInputStream fileStream = new FileInputStream(getApplicationContext().getContentResolver().openFileDescriptor(fileUri, "r").getFileDescriptor());
+            FileChannel channel = fileStream.getChannel();
+            long fileSize = 0;
+            try {
+                fileSize = channel.size();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            fileRequestBody = new ProgressRequestBody(mediaType, fileSize, fileStream, this::handleProgress);
+        } else {
+            FileTransferBackground.logMessage("fileUri: " + fileUri);
+            FileTransferBackground.logMessage("fileUri.toString: " + fileUri.toString());
+
+            File file = new File(fileUri.toString());
+            fileRequestBody = new ProgressRequestBody(mediaType, file.length(), new FileInputStream(file), this::handleProgress);
+        }
+        return fileRequestBody;
+    }
+
+    private void addHeaders(Request.Builder requestBuilder) {
         final int headersCount = nextPendingUpload.getInputData().getInt(KEY_INPUT_HEADERS_COUNT, 0);
         final String[] headerNames = nextPendingUpload.getInputData().getStringArray(KEY_INPUT_HEADERS_NAMES);
         assert headerNames != null;
@@ -387,9 +429,17 @@ public final class UploadTask extends Worker {
 
             requestBuilder.addHeader(key, value.toString());
         }
+    }
 
-        // Ok
-        return requestBuilder.build();
+    @NonNull
+    private String getRequestMethod() {
+        String method = nextPendingUpload.getInputData().getString(KEY_INPUT_HTTP_METHOD);
+
+        if (method == null) {
+            method = "POST";
+        }
+
+        return method.toUpperCase();
     }
 
     @NonNull
