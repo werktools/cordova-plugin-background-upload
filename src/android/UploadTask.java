@@ -4,14 +4,12 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build;
-import android.webkit.MimeTypeMap;
 
 import androidx.annotation.NonNull;
 import androidx.work.Data;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -329,30 +327,28 @@ public final class UploadTask extends Worker {
         final String filepath = nextPendingUpload.getInputData().getString(KEY_INPUT_FILEPATH);
         assert filepath != null;
         final String fileKey = nextPendingUpload.getInputData().getString(KEY_INPUT_FILE_KEY);
-        assert fileKey != null;
         final String contentType = nextPendingUpload.getInputData().getString(KEY_CONTENT_TYPE);
 
         // Build URL
         HttpUrl url = Objects.requireNonNull(HttpUrl.parse(nextPendingUpload.getInputData().getString(KEY_INPUT_URL))).newBuilder().build();
+        Uri fileUri = Uri.parse(filepath);
+
+        // Get the mime type. We will need this for the rest of the stuff we will do. We can't base
+        // this off of the extension anymore.
+        final String mimeType = getApplicationContext().getContentResolver().getType(fileUri);
+        FileTransferBackground.logMessage("createRequest/mimeType: " + mimeType);
 
         // Build file reader
-        String extension = MimeTypeMap.getFileExtensionFromUrl(filepath);
         MediaType mediaType;
         
         if(contentType != null) {
             // if a content type is given, use it to chose the media type
             mediaType = MediaType.parse(contentType);
         } else {
-            if (extension.equals("json") || extension.equals("db")) {
-                // Does not support devices less than Android 10 (Stop Execution)
-                // https://stackoverflow.com/questions/44667125/getmimetypefromextension-returns-null-when-i-pass-json-as-extension
-                mediaType = MediaType.parse(MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) + "; charset=utf-8");
-            } else {
-                mediaType = MediaType.parse(MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension));
-            }
+            // The old code here added "; charset=utf-8" at the end of the mediaType if it was json or a "db" extension. But I'm not gonna do that.
+            mediaType = MediaType.parse(mimeType);
         }
 
-        Uri fileUri = Uri.parse(filepath);
         FileInputStream fileStream = new FileInputStream(getApplicationContext().getContentResolver().openFileDescriptor(fileUri, "r").getFileDescriptor());
         FileChannel channel = fileStream.getChannel();
         long fileSize = 0;
@@ -364,8 +360,42 @@ public final class UploadTask extends Worker {
 
         ProgressRequestBody fileRequestBody = new ProgressRequestBody(mediaType, fileSize, fileStream, this::handleProgress);
 
-        // Build body
-        final MultipartBody.Builder bodyBuilder = new MultipartBody.Builder();
+        MultipartBody.Builder bodyBuilder = null;
+
+        if (fileKey != null) {
+            // Build body
+            bodyBuilder = buildFormRequest(filepath, fileKey, fileRequestBody);
+        }
+
+        // Start build request
+        String method = nextPendingUpload.getInputData().getString(KEY_INPUT_HTTP_METHOD);
+
+        if (method == null) {
+            method = "POST";
+        }
+        Request.Builder requestBuilder = new Request.Builder()
+                .url(url)
+                .method(method.toUpperCase(), fileKey == null ? fileRequestBody : bodyBuilder.build());
+
+        // Write headers
+        final int headersCount = nextPendingUpload.getInputData().getInt(KEY_INPUT_HEADERS_COUNT, 0);
+        final String[] headerNames = nextPendingUpload.getInputData().getStringArray(KEY_INPUT_HEADERS_NAMES);
+        assert headerNames != null;
+        for (int i = 0; i < headersCount; i++) {
+            final String key = headerNames[i];
+            final Object value = nextPendingUpload.getInputData().getKeyValueMap().get(KEY_INPUT_HEADER_VALUE_PREFIX + i);
+
+            requestBuilder.addHeader(key, value.toString());
+        }
+
+        // Ok
+        return requestBuilder.build();
+    }
+
+    @NonNull
+    private MultipartBody.Builder buildFormRequest(String filepath, String fileKey, ProgressRequestBody fileRequestBody) {
+        MultipartBody.Builder bodyBuilder;
+        bodyBuilder = new MultipartBody.Builder();
 
         // With the parameters
         final int parametersCount = nextPendingUpload.getInputData().getInt(KEY_INPUT_PARAMETERS_COUNT, 0);
@@ -383,30 +413,7 @@ public final class UploadTask extends Worker {
 
         bodyBuilder.addFormDataPart(fileKey, filepath, fileRequestBody);
         bodyBuilder.setType(MultipartBody.FORM);
-
-        // Start build request
-        String method = nextPendingUpload.getInputData().getString(KEY_INPUT_HTTP_METHOD);
-        if (method == null) {
-            method = "PUT";
-        }
-        Request.Builder requestBuilder = new Request.Builder()
-            .url(url)
-        .put(fileRequestBody);
-        //.method(method.toUpperCase(), bodyBuilder.build());
-
-        // Write headers
-        final int headersCount = nextPendingUpload.getInputData().getInt(KEY_INPUT_HEADERS_COUNT, 0);
-        final String[] headerNames = nextPendingUpload.getInputData().getStringArray(KEY_INPUT_HEADERS_NAMES);
-        assert headerNames != null;
-        for (int i = 0; i < headersCount; i++) {
-            final String key = headerNames[i];
-            final Object value = nextPendingUpload.getInputData().getKeyValueMap().get(KEY_INPUT_HEADER_VALUE_PREFIX + i);
-
-            requestBuilder.addHeader(key, value.toString());
-        }
-
-        // Ok
-        return requestBuilder.build();
+        return bodyBuilder;
     }
 
     private void handleNotification() {
