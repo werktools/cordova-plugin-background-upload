@@ -39,6 +39,10 @@ FileTransferManager.prototype.startUpload = function (payload) {
     payload.fileKey = 'file'
   }
 
+  if (!payload.requestMethod) {
+    payload.requestMethod = 'POST'
+  }
+
   payload.notificationTitle = payload.notificationTitle || 'Uploading files'
 
   if (!payload.headers) {
