@@ -134,7 +134,7 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
         [request setValue:[headers objectForKey:key] forHTTPHeaderField:key];
     }
     [NSURLProtocol setProperty:uploadId forKey:kUploadUUIDStrPropertyKey inRequest:request];
-    
+
     handler(error, request);
 }
 
