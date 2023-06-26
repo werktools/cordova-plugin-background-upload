@@ -79,7 +79,7 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
 -(void)addUpload:(NSDictionary *)payload completionHandler:(void (^)(NSError* error))handler{
     __weak FileUploader *weakSelf = self;
     [self createRequest: [NSURL URLWithString:payload[@"serverUrl"]]
-                                method:payload[@"requestMethod"]
+                                method:[payload[@"requestMethod"] uppercaseString]
                               uploadId:payload[@"id"]
                                fileURL:[NSURL fileURLWithPath:payload[@"filePath"]]
                                headers: payload[@"headers"]
@@ -105,7 +105,13 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
                 }];
             }
         }
-                               completionHandler:nil] resume];
+                               completionHandler:^(NSURLResponse * _Nonnull response, id  _Nullable responseObject, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"Error: %@", error);
+            } else {
+                NSLog(@"%@ %@", response, responseObject);
+            }
+        }] resume];
     }];
 }
 
@@ -125,7 +131,21 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
                                     parameters:parameters
                      constructingBodyWithBlock:^(id<AFMultipartFormData> formData)
      {
-        [formData appendPartWithFileData:data name:fileKey fileName:filename mimeType:@"application/octet-stream"];
+        NSString *fileExtension = [fileURL pathExtension];
+        NSString *UTI = (__bridge_transfer NSString *)UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, (__bridge CFStringRef)fileExtension, NULL);
+        NSString *contentType = (__bridge_transfer NSString *)UTTypeCopyPreferredTagWithClass((__bridge CFStringRef)UTI, kUTTagClassMIMEType);
+
+        NSLog(@"Got fileUrk: %@", fileURL);
+        NSLog(@"Got key: %@", fileKey);
+        NSLog(@"Got content type: %@", contentType);
+
+        [formData
+         appendPartWithFileURL: fileURL
+         name:fileKey
+         fileName:[fileURL.absoluteString lastPathComponent]
+         mimeType:contentType
+         error:nil
+        ];
     }
                                          error:&error];
     if (error)
