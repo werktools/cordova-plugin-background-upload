@@ -78,19 +78,19 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
 
 -(void)addUpload:(NSDictionary *)payload completionHandler:(void (^)(NSError* error))handler{
     __weak FileUploader *weakSelf = self;
-    NSURL *filePath = [NSURL fileURLWithPath:payload[@"filePath"]];
     [self createRequest: [NSURL URLWithString:payload[@"serverUrl"]]
+                                method:payload[@"requestMethod"]
                               uploadId:payload[@"id"]
+                               fileURL:[NSURL fileURLWithPath:payload[@"filePath"]]
                                headers: payload[@"headers"]
                             parameters:payload[@"parameters"]
+                               fileKey:payload[@"fileKey"]
                      completionHandler:^(NSError *error, NSMutableURLRequest *request) {
         if (error)
             return handler(error);
         __block double lastProgressTimeStamp = 0;
 
-        NSURLSessionUploadTask *uploadTask;
-        uploadTask = [weakSelf.manager uploadTaskWithRequest:request
-                                        fromFile:filePath
+        [[weakSelf.manager uploadTaskWithStreamedRequest:request
                                         progress:^(NSProgress * _Nonnull uploadProgress)
           {
             float roundedProgress = roundf(10 * (uploadProgress.fractionCompleted*100)) / 10.0;
@@ -105,23 +105,29 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
                 }];
             }
         }
-                                            completionHandler:nil];
-        [uploadTask resume];
+                               completionHandler:nil] resume];
     }];
 }
 
 -(void)createRequest: (NSURL*)url
+                             method:(NSString*)method
                            uploadId:(NSString*)uploadId
+                            fileURL:(NSURL *)fileURL
                             headers:(NSDictionary*)headers
                          parameters:(NSDictionary*)parameters
+                            fileKey:(NSString*)fileKey
                   completionHandler:(void (^)(NSError* error, NSMutableURLRequest* request))handler{
     AFHTTPRequestSerializer *serializer = [AFHTTPRequestSerializer serializer];
     NSError *error;
     NSMutableURLRequest *request =
-    [serializer requestWithMethod:@"PUT"
-                    URLString:url.absoluteString
-                    parameters:parameters
-                    error:&error];
+    [serializer multipartFormRequestWithMethod:method
+                                     URLString:url.absoluteString
+                                    parameters:parameters
+                     constructingBodyWithBlock:^(id<AFMultipartFormData> formData)
+     {
+        [formData appendPartWithFileData:data name:fileKey fileName:filename mimeType:@"application/octet-stream"];
+    }
+                                         error:&error];
     if (error)
         return handler(error, nil);
     for (NSString *key in headers) {
