@@ -110,11 +110,6 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
     }];
 }
 
--(NSURL*)tempFilePathForUpload:(NSString*)uploadId{
-    NSString* path = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES)[0];
-    return [NSURL fileURLWithPath:[path stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.request",uploadId]]];
-}
-
 -(void)createRequest: (NSURL*)url
                            uploadId:(NSString*)uploadId
                             headers:(NSDictionary*)headers
