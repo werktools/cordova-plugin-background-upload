@@ -169,6 +169,13 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
             return handler(error);
         __block double lastProgressTimeStamp = 0;
 
+        NSString *fileExtension = [[NSURL fileURLWithPath:payload[@"filePath"]] pathExtension];
+        NSString *UTI = (__bridge_transfer NSString *)UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, (__bridge CFStringRef)fileExtension, NULL);
+        NSString *contentType = (__bridge_transfer NSString *)UTTypeCopyPreferredTagWithClass((__bridge CFStringRef)UTI, kUTTagClassMIMEType);
+
+        // We must set this so that we get the correct Content-Type header.
+        [request setValue:contentType forHTTPHeaderField:@"Content-Type"];
+
         [[weakSelf.manager uploadTaskWithRequest:request
                                         fromFile:[NSURL fileURLWithPath:payload[@"filePath"]]
                                         progress:^(NSProgress * _Nonnull uploadProgress)
