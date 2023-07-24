@@ -35,9 +35,10 @@ FileTransferManager.prototype.startUpload = function (payload) {
     return this.callback({ id: payload.id, state: 'FAILED', error: 'filePath is required' })
   }
 
-  if (!payload.fileKey) {
-    payload.fileKey = 'file'
-  }
+  // Since we support PUT now, not having a fileKey is our indication that we want a PUT request.
+  // if (!payload.fileKey) {
+  //  payload.fileKey = 'file'
+  // }
 
   if (!payload.requestMethod) {
     payload.requestMethod = 'POST'
