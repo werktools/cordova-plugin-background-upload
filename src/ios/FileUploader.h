@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <MobileCoreServices/MobileCoreServices.h>
 #import "UploadEvent.h"
 #import <AFNetworking/AFNetworking.h>
 NS_ASSUME_NONNULL_BEGIN
