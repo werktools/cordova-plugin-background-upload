@@ -34,10 +34,6 @@ static NSString * kUploadUUIDStrPropertyKey = @"com.spoonconsulting.plugin-backg
     configuration.HTTPMaximumConnectionsPerHost = FileUploader.parallelUploadsLimit;
     configuration.sessionSendsLaunchEvents = YES; // wake up the application when a task succeeds or fails
 
-    // Set the multipathServiceType to aggregate. This will allow the uploader to utilize all available connections simultaneously
-    // increasing the amount of available bandwidth.
-    configuration.multipathServiceType = NSURLSessionMultipathServiceTypeAggregate;
-
     __weak FileUploader *weakSelf = self;
 
     self.manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
